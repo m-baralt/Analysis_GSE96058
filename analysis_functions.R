@@ -284,7 +284,12 @@ random_survival_forest <- function(expr_data, pheno_data, covars, path,
                                          surv.event = test_data$overall.survival.event.ch1,
                                          method = "noether")
   
-  saveRDS(model_surv, file = path)
+  total_result <- list(model = model_surv,
+                       concordance_index = c_index, 
+                       VIP = importance_vars, 
+                       concordance_index_baseline = c_index_baseline)
+  
+  saveRDS(total_result, file = path)
   return(list(concordance_index = c_index, VIP = importance_vars, 
               concordance_index_baseline = c_index_baseline))
 }

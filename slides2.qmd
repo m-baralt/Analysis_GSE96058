@@ -1,0 +1,289 @@
+---
+title: "RNA-seq in breast cancer"
+format:
+  revealjs:
+    css: custom.css
+editor: visual
+author: Maria Barranco Altirriba
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = getwd())
+source("analysis_functions.R")
+```
+
+## Introduction {.smaller}
+
+### Study description
+
+::: incremental
+-   **Study:** Brueffer C et al. Clinical Value of RNA Sequencing-Based Classifiers for Prediction of the Five Conventional Breast Cancer Biomarkers: A Report From the Population-Based Multicenter Sweden Cancerome Analysis Network-Breast Initiative. JCO Precis Oncol. 2018 Mar 9;2:PO.17.00135. doi: 10.1200/PO.17.00135. PMID: 32913985; PMCID: PMC7446376.
+
+-   **Objective:** Develop mRNA-based classifiers for five conventional breast cancer biomarkers: estrogen receptor (ER), progesterone receptor (PgR), human epidermal growth factor receptor 2 (HER2), Ki67, and Nottingham histologic grade (NHG), and test if the new predictors would add value for risk stratification.
+
+-   **Datasets:**
+
+    -   Training: 405 tumor samples that underwent multi-rater histopathologic evaluation.
+    -   Validation: 3,273 tumor samples from a prospective population (follow-up time of (median) 52 months)
+:::
+
+## Methods {.scrollable .smaller}
+
+### GEO data description
+
+::: incremental
+-   **GEO:**
+
+    -   Series GSE96058 (Requested): It contains the validation cohort (3,273 samples).
+    -   Part of SuperSeries GSE81540: GSE96058 and GSE81538 (405 samples cohort - training)
+
+-   **Downloading:**
+
+    -   *getGEO("GSE96058")* from *GEOquery* package is used to obtain phenotype data.
+    -   *getGEOSuppFiles("GSE96058")* downloads "GSE96058_UCSC_hg38_knownGenes_22sep2014.gtf.gz", which contains gene annotation information.
+    -   "GSE96058_transcript_expression_3273_samples_and_136_replicates.csv.gz" is available in GEO, which contains transcript information
+    -   "GSE96058_gene_expression_3273_samples_and_136_replicates_transformed.csv.gz" is available in GEO, which contains gene expression obtained by mapping the transcript expression to the known genes table and summing all transcripts that belong to the same gene.
+    -   The gene expression data is downloaded using:
+
+    ``` bash
+    wget https://ftp.ncbi.nlm.nih.gov/geo/series/GSE96nnn/GSE96058/suppl/GSE96058_gene_expression_3273_samples_and_136_replicates_transformed.csv.gz
+    ```
+:::
+
+## Methods {.scrollable .smaller}
+
+### Data description steps
+
+::: incremental
+-   Descriptive statistics with *CompareGroups* R package.
+
+-   Gene expression filtering based on genes variance (Second decile).
+
+-   Principal Components Analysis (PCA).
+
+-   Multiple linear regression models.
+
+-   Multiple Cox regression models.
+
+-   Survival random forest.
+:::
+
+## Results {.smaller}
+
+### Descriptive statistics
+
+```{r, warning=FALSE}
+library(ggplot2)
+pheno_data <- readRDS("data/pheno_data.rds")
+
+p_age <- ggplot(pheno_data, aes(x=age.at.diagnosis.ch1, fill=overall.survival.event.ch1)) +
+    geom_histogram(color="#e9ecef", alpha=0.6, position = 'identity', bins = 30) +
+    scale_fill_manual(values=c("#69b3a2", "#404080")) +
+    labs(fill = "Survival", x = "Age at diagnosis (years)") +
+  theme_bw() +
+  theme(axis.title.y = element_blank())
+
+p_tumor.size.ch1 <- ggplot(pheno_data, aes(x=tumor.size.ch1, fill=overall.survival.event.ch1)) +
+    geom_histogram(color="#e9ecef", alpha=0.6, position = 'identity', bins = 30) +
+    scale_fill_manual(values=c("#69b3a2", "#404080")) +
+    labs(fill = "Survival", x = "Age at diagnosis (years)") +
+  theme_bw() +
+  theme(axis.title.y = element_blank())
+
+ggpubr::ggarrange(plotlist = list(p_age, p_tumor.size.ch1), ncol = 2, 
+                  common.legend = TRUE, legend = "bottom")
+
+```
+
+## Results {.scrollable .smaller}
+
+### Descriptive statistics
+
+```{r}
+library(compareGroups)
+
+vars_interest <- c("age.at.diagnosis.ch1", "chemo.treated.ch1", "endocrine.treated.ch1",
+                   "er.status.ch1", "her2.status.ch1", "ki67.status.ch1", "lymph.node.group.ch1",
+                   "lymph.node.status.ch1", "nhg.ch1", "overall.survival.days.ch1", "pam50.subtype.ch1",
+                   "pgr.status.ch1", "tumor.size.ch1")
+
+res<-compareGroups(as.formula(paste0("overall.survival.event.ch1 ~ ", 
+                                     paste(vars_interest, collapse = "+"))), 
+                   data=pheno_data)
+createTable(res, show.all = TRUE, show.n = TRUE)
+
+```
+
+## Results
+
+### PCA for quality control
+
+```{r}
+expr_data <- readRDS("data/GSE96058_expr_data.rds")
+expr_data_t <- as.data.frame(t(expr_data))
+filtered_expr_data <- variability_based_filtering(expr_data = expr_data_t, percentile = 0.2)
+# PCA
+pca_results <- pca_comput(expr_data = filtered_expr_data, pheno_data = pheno_data,
+           center = TRUE, scale = TRUE, k = 10)
+
+# QC PCA plots
+p_repl <- pca_plot(pca_results = pca_results, color_variable = "Replicates",
+         variable_nameplot = "Replicates", variable_type = "factor")
+
+p_platform <- pca_plot(pca_results = pca_results, color_variable = "instrument.model.ch1",
+         variable_nameplot = "Platform", variable_type = "factor")
+
+
+ggpubr::ggarrange(plotlist = list(p_platform, p_repl), ncol = 2)
+
+```
+
+## Results {.smaller .scrollable}
+
+### PCA for biological patterns
+
+```{r}
+pca_results$PCA_pheno <- pca_results$PCA_pheno[pca_results$PCA_pheno$Replicates==0,]
+
+p_age <- pca_plot(pca_results = pca_results, color_variable = "age.at.diagnosis.ch1",
+         variable_nameplot = "Age at diagnosis", variable_type = "numeric")
+
+p_chemo <- pca_plot(pca_results = pca_results, color_variable = "chemo.treated.ch1",
+         variable_nameplot = "Chemotherapy", variable_type = "factor")
+
+p_endocrine <- pca_plot(pca_results = pca_results, color_variable = "endocrine.treated.ch1",
+         variable_nameplot = "Endocrine treatment", variable_type = "factor")
+
+p_lymphnode <- pca_plot(pca_results = pca_results, color_variable = "lymph.node.group.ch1",
+         variable_nameplot = "Lymph node status", variable_type = "factor")
+
+p_pam50 <- pca_plot(pca_results = pca_results, color_variable = "pam50.subtype.ch1",
+         variable_nameplot = "PAM50 subtype", variable_type = "factor")
+
+p_survival <- pca_plot(pca_results = pca_results, color_variable = "overall.survival.event.ch1",
+         variable_nameplot = "Survival", variable_type = "factor")
+```
+
+```{r}
+ggpubr::ggarrange(p_age, p_survival, ncol = 2)
+```
+
+## Results {.smaller .scrollable}
+
+### PCA for biological patterns
+
+```{r}
+ggpubr::ggarrange(p_chemo, p_endocrine, ncol = 2)
+```
+
+## Results {.smaller .scrollable}
+
+### PCA for biological patterns
+
+```{r}
+ggpubr::ggarrange(p_lymphnode, p_pam50, ncol = 2)
+```
+
+## Results {.smaller .scrollable}
+
+### Lymph nodes status
+
+-   A linear model for each gene with age at diagnosis, tumor size, chemotherapy and endocrine treatment as confounders.
+-   FDR for multiple comparisons correction and corrected p-value \< 0.05 is considered as significant.
+
+```{r}
+pvals_lymph_node <- read.csv("data/pvalues_lymph_nodes_lm.csv", 
+                             row.names = 1)
+gene_sign <- pvals_lymph_node$Gene[pvals_lymph_node$p_adj<0.05]
+L_genes <- length(gene_sign)
+```
+
+-   A total number of `r L_genes` were determined as significant.
+
+```{r}
+library(gprofiler2)
+enrichment_results <- enrichment_analysis(gene_list = gene_sign)
+enrichment_results$goplot
+
+```
+
+## Results {.smaller .scrollable}
+
+### Survival analysis with Cox regression
+
+-   A cox regression model for each gene with age at diagnosis, tumor size, lymph node group, chemotherapy and endocrine treatment as confounders.
+-   FDR for multiple comparisons correction and corrected p-value \< 0.05 is considered as significant.
+
+```{r}
+pvals_cox <- read.csv("data/pvalues_cox.csv", row.names = 1)
+gene_sign <- pvals_cox$Feature[(pvals_cox$p_adj<0.05) & (pvals_cox$GLOBAL>0.05)]
+L_genes <- length(gene_sign)
+```
+
+-   A total number of `r L_genes` were determined as significant and fullfiled the proportional hazards assumption.
+
+```{r}
+library(gprofiler2)
+enrichment_results <- enrichment_analysis(gene_list = gene_sign)
+enrichment_results$goplot
+```
+
+## Results {.smaller .scrollable}
+
+### Survival random forest
+
+-   A survival random forest is trained using 80% of the data.
+-   Validated in test using the Concordance index metric.
+-   Different levels of filtering are used: 25, 50, 75, 95 and 99 percentile of the genes variability.
+-   The concordance index obtained in each case is compared to the baseline model: age at diagnosis, chemotherapy, endocrine treatment, lymph node group and tumor size.
+-   Another model using only significant features in Cox regression is trained.
+
+```{r}
+survival_25 <- readRDS("data/ranger_survival_model_25.rds")
+survival_50 <- readRDS("data/ranger_survival_model_5.rds")
+survival_75 <- readRDS("data/ranger_survival_model_75.rds")
+survival_95 <- readRDS("data/ranger_survival_model_95.rds")
+survival_99 <- readRDS("data/ranger_survival_model_99.rds")
+survival_cox <- readRDS("data/ranger_survival_model_cox.rds")
+
+survival_results <- data.frame(Model = c("Baseline", "25 percentile", 
+                     "50 percentile", "75 percentile",
+                     "95 percentile", "99 percentil", 
+                     "Cox filter"),
+           Concordance_index = c(survival_25$concordance_index_baseline$c.index,
+                                 survival_25$concordance_index$c.index,
+                                 survival_50$concordance_index$c.index,
+                                 survival_75$concordance_index$c.index,
+                                 survival_95$concordance_index$c.index,
+                                 survival_99$concordance_index$c.index,
+                                 survival_cox$concordance_index$c.index))
+
+kableExtra::kable(survival_results)
+
+```
+
+## Next steps {.smaller}
+
+-   Interpret pathway enrichment results.
+
+-   Apply deep survival analysis using `pycox`.
+
+-   Perform biclustering to identify groups of samples and genes with correlated patterns.
+
+-   Use graph neural networks to integrate transcriptomics data with pathway knowledge.
+
+## GNN for integration
+
+![](images/fig1.png){width="50%"}
+
+## GNN for integration
+
+![](images/fig2.png){width="50%"}
+
+## GNN for integration
+
+![](images/fig3.png){width="50%"}
+
+## GNN for integration
+
+![](images/fig4.png){width="50%"}
