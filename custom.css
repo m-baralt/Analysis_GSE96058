@@ -1,0 +1,37 @@
+
+.reveal .slides,
+.reveal .slides > section,
+.reveal .slides > section > * {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+
+.reveal section {
+  margin: 0 !important;
+  padding: 0 !important;   /* removed padding entirely */
+}
+
+/* Scrollable block: fill width and reduce all spacing */
+.scrollable {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;  /* removed padding */
+  margin: 0 !important;
+  max-height: 85vh;                 
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+}
+
+/* Ensure incremental content has tighter spacing */
+.reveal .fragment {
+  margin-top: 0.1em !important;   /* reduced more */
+  margin-bottom: 0.1em !important;
+}
+
+.reveal {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+}
