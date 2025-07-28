@@ -1,11 +1,9 @@
 library(GEOquery)
 library(magrittr)
 
-setwd(getwd())
 source("analysis_functions.R")
 
 # GEO download and preparation
-setwd("data/")
 gds <- getGEO("GSE96058")
 data1 <- gds$`GSE96058-GPL11154_series_matrix.txt.gz`
 data2 <- gds$`GSE96058-GPL18573_series_matrix.txt.gz`
