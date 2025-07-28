@@ -20,7 +20,7 @@ git clone https://github.com/m-baralt/Analysis_GSE96058.git
 
 3. Open the project in RStudio by double-clicking the file: `Analysis_GSE96058.Rproj`. This ensures the working directory is correctly set, so all relative paths will work automatically.
 
-4. Download the expression dataset using the provided script:
+4. Download the expression dataset using the following command lines:
 
 ```
 chmod +x download_expression_data.sh
@@ -35,7 +35,7 @@ This will download the expression dataset into the `data/` folder.
 
 *OR*
 
-If you prefer, you can skip step 5 by downloading precomputed results:
+If you prefer, you can skip step 5 by downloading precomputed results using:
 
 ```
 chmod +x download_classical_statistics.sh
@@ -44,7 +44,7 @@ chmod +x download_survivalRF.sh
 ./download_survivalRF.sh
 ```
 
-Then render the `slides.qmd` file.
+Then render the `slides.qmd` file from Rstudio.
 
 ## Requirements
 - R (≥ 4.0)
